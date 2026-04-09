@@ -1,11 +1,12 @@
-#' Inference for fddml Results
+#' Inference for didml Results
 #'
 #' Computes standard errors, confidence intervals, and p-values for
-#' DML-Wald and DML-TC estimates. Supports analytical (i.i.d.), clustered,
-#' and multiplier bootstrap variance estimation.
+#' DML-Wald, DML-TC, and DML-Chang estimates. Supports analytical (i.i.d.),
+#' clustered, and multiplier bootstrap variance estimation.
 #'
-#' @param result A list from \code{fddml_wald()} or \code{fddml_tc()},
-#'   must contain `estimate`, `scores`, `den_i`, and `variance`.
+#' @param result A list from \code{didml_wald()}, \code{didml_tc()}, or
+#'   \code{didml_chang()}, must contain `estimate`, `scores`, `den_i`,
+#'   and `variance`.
 #' @param cluster Optional numeric or factor vector of cluster identifiers
 #'   (same length as the data). When provided, computes cluster-robust SEs.
 #' @param se_type Character: `"analytical"` (default), `"cluster"` (requires
@@ -18,7 +19,7 @@
 #'   `variance`, `se_type`, `alpha`.
 #'
 #' @export
-fddml_inference <- function(result, cluster = NULL, se_type = "analytical",
+didml_inference <- function(result, cluster = NULL, se_type = "analytical",
                              B = 1000L, alpha = 0.05, seed = NULL) {
   se_type <- match.arg(se_type, c("analytical", "cluster", "bootstrap"))
 
@@ -41,7 +42,7 @@ fddml_inference <- function(result, cluster = NULL, se_type = "analytical",
   # Resolve cluster vs se_type conflict
 
   if (!is.null(cluster) && se_type != "cluster") {
-    message("Note: `cluster` provided; switching to cluster-robust SEs.")
+    warning("`cluster` provided; switching to cluster-robust SEs.", call. = FALSE)
     se_type <- "cluster"
   }
 

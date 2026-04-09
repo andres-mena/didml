@@ -4,5 +4,6 @@ utils::globalVariables(c(
   "m_D_10", "m_D_01", "m_D_00",
   "pG_raw", "estimand", "estimate", "se",
   "component", "value", "n_label", "alpha",
-  "pG", "score"
+  "pG", "score",
+  "ell_20", "pT", "wald_naive"
 ))

@@ -1,4 +1,4 @@
 library(testthat)
-library(fddml)
+library(didml)
 
-test_check("fddml")
+test_check("didml")

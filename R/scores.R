@@ -6,13 +6,13 @@
 #' Verified against CD'H (2018) supplement p.45 (r = 1.0000).
 #'
 #' @param W Data frame with columns Y, D, G, Ti.
-#' @param pred List of cross-fitted nuisance predictions from \code{fddml_nuisance()}.
+#' @param pred List of cross-fitted nuisance predictions from \code{didml_nuisance()}.
 #'
 #' @return List with `estimate`, `variance`, `scores`, `num_i`, `den_i`,
 #'   `wald_naive`. Returns NA estimate with warning if first stage is too weak.
 #'
 #' @export
-fddml_wald <- function(W, pred) {
+didml_wald <- function(W, pred) {
   N <- nrow(W)
   Y <- W$Y; D <- W$D; G <- W$G; Ti <- W$Ti
   GT <- G * Ti
@@ -91,14 +91,14 @@ fddml_wald <- function(W, pred) {
 #' Equivalent to CD'H (2018) supplement p.45 up to normalization.
 #'
 #' @param W Data frame with columns Y, D, G, Ti.
-#' @param pred List of cross-fitted nuisance predictions from \code{fddml_nuisance()}
+#' @param pred List of cross-fitted nuisance predictions from \code{didml_nuisance()}
 #'   with `estimand = "tc"` or `"both"`.
 #'
 #' @return List with `estimate`, `variance`, `scores`, `num_i`, `den_i`.
 #'   Returns NA estimate with warning if first stage is too weak.
 #'
 #' @export
-fddml_tc <- function(W, pred) {
+didml_tc <- function(W, pred) {
   N <- nrow(W)
   Y <- W$Y; D <- W$D; G <- W$G; Ti <- W$Ti
   GT <- G * Ti
@@ -123,10 +123,10 @@ fddml_tc <- function(W, pred) {
   # Propensities and weights
   pi_11 <- pred$pi_11; pi_10 <- pred$pi_10
   w_10 <- G * (1 - Ti) * pi_11 / (pi_10 * p_11)
-  w_101 <- D * (1 - G) * Ti * pi_11 / (pmax(pred$pi_101, 0.01) * p_11)
-  w_100 <- D * (1 - G) * (1 - Ti) * pi_11 / (pmax(pred$pi_100, 0.01) * p_11)
-  w_001 <- (1 - D) * (1 - G) * Ti * pi_11 / (pmax(pred$pi_001, 0.01) * p_11)
-  w_000 <- (1 - D) * (1 - G) * (1 - Ti) * pi_11 / (pmax(pred$pi_000, 0.01) * p_11)
+  w_101 <- D * (1 - G) * Ti * pi_11 / (pmax(pred$pi_101, .MIN_PROPENSITY) * p_11)
+  w_100 <- D * (1 - G) * (1 - Ti) * pi_11 / (pmax(pred$pi_100, .MIN_PROPENSITY) * p_11)
+  w_001 <- (1 - D) * (1 - G) * Ti * pi_11 / (pmax(pred$pi_001, .MIN_PROPENSITY) * p_11)
+  w_000 <- (1 - D) * (1 - G) * (1 - Ti) * pi_11 / (pmax(pred$pi_000, .MIN_PROPENSITY) * p_11)
 
   # Set non-finite weights to NA
   for (nm in c("w_10", "w_101", "w_100", "w_001", "w_000")) {
@@ -175,6 +175,102 @@ fddml_tc <- function(W, pred) {
     variance = V_hat,
     scores = psi_i,
     num_i = num_i,
+    den_i = den_i
+  )
+}
+
+
+#' Compute DML-Chang Scores (Sharp DID)
+#'
+#' Computes the doubly robust score for the sharp DID ATT estimand following
+#' Chang (2020), equation 3.2. Designed for repeated cross-section settings
+#' without an instrumental variable / fuzzy compliance.
+#'
+#' @details
+#' Chang's (2020) influence function for the ATT in a 2x2 DID with
+#' repeated cross-sections. In our notation (Chang's D = our G,
+#' Chang's T = our Ti):
+#'
+#' \deqn{
+#'   w_i = \frac{G_i - \hat{e}(X_i)}{p_T (1-p_T) \cdot p_0 \cdot (1 - \hat{e}(X_i))}
+#' }
+#' \deqn{
+#'   \psi_i = w_i \left[(T_i - p_T) Y_i - \hat{\ell}_{20}(X_i)\right]
+#' }
+#' \deqn{
+#'   \widehat{ATT} = \frac{1}{N} \sum_{i=1}^N \psi_i
+#' }
+#'
+#' where \eqn{p_0 = \Pr(G=0) = 1 - \bar{G}}, \eqn{p_T = \bar{T}_i},
+#' and \eqn{\ell_{20}(X) = E[(T_i - p_T) Y_i | X_i, G_i = 0]}.
+#'
+#' @param W Data frame with columns Y, D, G, Ti.
+#' @param pred List of cross-fitted nuisance predictions from
+#'   \code{didml_nuisance(iv = FALSE)}, containing \code{pG_raw},
+#'   \code{ell_20}, and \code{pT}.
+#'
+#' @return List with \code{estimate}, \code{variance}, \code{scores},
+#'   \code{num_i}, \code{den_i}. \code{den_i} is \code{rep(1, N)} for
+#'   compatibility with the inference pipeline (sharp ATT has no ratio).
+#'
+#' @references
+#' Chang, N.-C. (2020). Double/debiased machine learning for
+#' difference-in-differences treatment effects.
+#' \emph{The Econometrics Journal}, 23(2), 177-191.
+#'
+#' @export
+didml_chang <- function(W, pred) {
+  N <- nrow(W)
+  Y <- W$Y; G <- W$G; Ti <- W$Ti
+
+  pG_hat <- pred$pG_raw
+  ell_20 <- pred$ell_20
+  pT <- pred$pT
+
+  # Marginal probabilities
+
+  pG_bar <- mean(G)  # Pr(G = 1) = P(D=1) in Chang's notation
+
+  if (sum(G) < 10 || sum(1 - G) < 10) {
+    warning("Fewer than 10 treated or control observations. Cannot estimate ATT.", call. = FALSE)
+    return(list(estimate = NA_real_, variance = NA_real_, scores = rep(NA_real_, N),
+                num_i = rep(NA_real_, N), den_i = rep(1, N)))
+  }
+
+  # Weight: w_i = (G - e(X)) / (pT * (1-pT) * pG_bar * (1 - e(X)))
+  # Chang (2020) eq. 3.2: denominator normalizes by P(D=1) * (1 - g_0(X))
+  denom_w <- pT * (1 - pT) * pG_bar * (1 - pG_hat)
+
+  # Guard against division by near-zero
+  denom_w <- pmax(denom_w, 1e-10)
+
+  w_i <- (G - pG_hat) / denom_w
+
+  # Guard non-finite weights
+  if (any(!is.finite(w_i))) {
+    warning("Non-finite Chang weights (near-zero propensity). ",
+            "Affected obs set to NA.", call. = FALSE)
+    w_i[!is.finite(w_i)] <- NA_real_
+  }
+
+  # Score: psi_i = w_i * ((Ti - pT)*Y - ell_20(X))
+  psi_i <- w_i * ((Ti - pT) * Y - ell_20)
+
+  # ATT estimate
+  ok <- is.finite(psi_i)
+  ATT <- mean(psi_i[ok])
+
+  # Variance: V = E[(psi_i - ATT)^2]
+  V_hat <- mean((psi_i[ok] - ATT)^2)
+
+  # den_i = 1 for all obs (no ratio estimand in sharp DID)
+  den_i <- rep(1, N)
+
+  list(
+    estimate = ATT,
+    variance = V_hat,
+    scores = psi_i,
+    num_i = psi_i,
     den_i = den_i
   )
 }

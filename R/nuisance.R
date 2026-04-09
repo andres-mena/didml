@@ -1,14 +1,24 @@
 #' Cross-Fitted Nuisance Estimation
 #'
-#' Estimates all nuisance functions required for DML-Wald and DML-TC using
+#' Estimates all nuisance functions required for DML estimation using
 #' K-fold cross-fitting. Supports Lasso, Random Forest, neural networks,
 #' OLS, or a user-supplied function.
 #'
 #' @details
+#' When \code{iv = TRUE} (fuzzy DID), estimates conditional expectations
+#' of Y and D within each (g,t) cell, plus a cross-fitted propensity score.
 #' Joint cell probabilities are computed as Pr(G=g|X) * Pr(T=t),
 #' assuming time period T is independent of group and covariates.
 #' This holds in repeated cross-section designs where T indexes calendar
 #' time. It does NOT hold in balanced panel data.
+#'
+#' When \code{iv = FALSE} (sharp DID / Chang 2020), estimates:
+#' \enumerate{
+#'   \item Cross-fitted propensity score e(X) = Pr(G=1|X).
+#'   \item The pseudo-outcome regression ell_20(X) = E\[(Ti - pT)*Y \| X, G=0\]
+#'     via cross-fitting within the control group (G=0).
+#' }
+#' No cell-specific conditional expectations are needed.
 #'
 #' When a cell-fold intersection has fewer than 10 training observations,
 #' the function returns NA for those predictions (never imputes cell means).
@@ -23,12 +33,19 @@
 #' @param method Character string (`"lasso"`, `"rf"`, `"nn"`, `"ols"`) or a
 #'   function `f(Y_train, X_train, X_predict)` returning predicted values.
 #' @param K Integer >= 2, number of cross-fitting folds (default 5).
-#' @param estimand Which estimand to prepare nuisance for: `"wald"`, `"tc"`,
-#'   or `"both"` (default).
+#' @param iv Logical. If \code{TRUE} (default), estimate nuisance for fuzzy
+#'   DID (Wald/TC). If \code{FALSE}, estimate nuisance for sharp DID
+#'   (Chang 2020).
+#' @param estimand Which estimand to prepare nuisance for. When \code{iv = TRUE}:
+#'   `"wald"`, `"tc"`, or `"both"` (default). When \code{iv = FALSE}:
+#'   `"chang"` (only valid option, set automatically).
 #' @param seed Random seed for fold assignment (default `NULL`).
 #'
 #' @return A list with cross-fitted predictions for every observation.
 #'   Entries may contain NA where estimation failed (small cells, collinearity).
+#'   When \code{iv = FALSE}, the list contains: \code{pG_raw}, \code{pi_11},
+#'   \code{pi_10}, \code{pi_01}, \code{pi_00}, \code{ell_20}, \code{pT},
+#'   \code{folds}, and \code{estimand = "chang"}.
 #'
 #' @examples
 #' \donttest{
@@ -39,16 +56,20 @@
 #' Ti <- rbinom(N, 1, 0.5)
 #' D <- rbinom(N, 1, plogis(X[,1] + G))
 #' Y <- 1 + X[,1] + D + rnorm(N)
-#' nuis <- fddml_nuisance(Y, D, G, Ti, X, method = "ols", K = 2)
+#' # Fuzzy DID nuisance
+#' nuis_fuzzy <- didml_nuisance(Y, D, G, Ti, X, method = "ols", K = 2, iv = TRUE)
+#' # Sharp DID nuisance (Chang 2020)
+#' nuis_sharp <- didml_nuisance(Y, D, G, Ti, X, method = "ols", K = 2, iv = FALSE)
 #' }
 #'
 #' @export
-fddml_nuisance <- function(Y, D, G, Ti, X,
+didml_nuisance <- function(Y, D, G, Ti, X,
                             method = "lasso",
                             K = 5L,
+                            iv = TRUE,
                             estimand = "both",
                             seed = NULL) {
-  estimand <- match.arg(estimand, c("wald", "tc", "both"))
+  # Validate method
   if (is.character(method)) {
     method <- match.arg(method, c("lasso", "rf", "nn", "ols"))
   } else if (!is.function(method)) {
@@ -64,6 +85,67 @@ fddml_nuisance <- function(Y, D, G, Ti, X,
 
   folds <- .make_folds(N, K, seed = seed)
   pT <- mean(Ti)
+
+  # ---- Sharp DID path (Chang 2020) ----
+  if (!iv) {
+    estimand <- "chang"
+
+    # Cross-fitted propensity score P(G=1|X)
+    pG_raw <- rep(NA_real_, N)
+    for (k in seq_len(K)) {
+      train_k <- which(folds != k)
+      pred_k <- which(folds == k)
+      pG_raw[pred_k] <- .fit_nuisance_cell(G[train_k], X[train_k, , drop = FALSE],
+                                             X[pred_k, , drop = FALSE], method,
+                                             family = "binomial")
+    }
+    # Pre-clip to avoid numerical issues in downstream weight computation.
+    # The trimming step in didml() applies the user's chosen rule on top.
+    pG_raw <- pmax(pmin(pG_raw, 1 - .MIN_PROPENSITY), .MIN_PROPENSITY)
+
+    # Joint cell probabilities
+    pi_11 <- pG_raw * pT
+    pi_10 <- pG_raw * (1 - pT)
+    pi_01 <- (1 - pG_raw) * pT
+    pi_00 <- (1 - pG_raw) * (1 - pT)
+
+    # Pseudo-outcome: (Ti - pT) * Y, regressed on X within G=0
+    pseudo_Y <- (Ti - pT) * Y
+    idx_g0 <- which(G == 0)
+
+    ell_20 <- rep(NA_real_, N)
+    for (k in seq_len(K)) {
+      train_k <- idx_g0[folds[idx_g0] != k]
+      pred_k <- which(folds == k)
+      ell_20[pred_k] <- .fit_nuisance_cell(pseudo_Y[train_k],
+                                             X[train_k, , drop = FALSE],
+                                             X[pred_k, , drop = FALSE], method)
+    }
+
+    result <- list(
+      pG_raw = pG_raw,
+      pi_11 = pi_11, pi_10 = pi_10, pi_01 = pi_01, pi_00 = pi_00,
+      ell_20 = ell_20,
+      pT = pT,
+      folds = folds,
+      estimand = "chang"
+    )
+
+    # Warn about NAs
+    core_preds <- c("pG_raw", "ell_20")
+    na_counts <- vapply(result[core_preds], function(x) sum(is.na(x)), integer(1L))
+    if (any(na_counts > 0)) {
+      bad <- core_preds[na_counts > 0]
+      warning("Nuisance predictions contain NA in: ",
+              paste(bad, collapse = ", "),
+              ". Check cell sizes and method convergence.", call. = FALSE)
+    }
+
+    return(result)
+  }
+
+  # ---- Fuzzy DID path (iv = TRUE) ----
+  estimand <- match.arg(estimand, c("wald", "tc", "both"))
 
   # Cell indices
   cells <- list(
@@ -103,7 +185,8 @@ fddml_nuisance <- function(Y, D, G, Ti, X,
                                            X[pred_k, , drop = FALSE], method,
                                            family = "binomial")
   }
-  pG_raw <- pmax(pmin(pG_raw, 0.999), 0.001)
+  # Pre-clip to avoid numerical issues in downstream weight computation
+  pG_raw <- pmax(pmin(pG_raw, 1 - .MIN_PROPENSITY), .MIN_PROPENSITY)
 
   # Joint cell probabilities: pi_{gt}(X) = Pr(G=g|X) * Pr(T=t)
   # Assumes T independent of (G, X) — valid in repeated cross-sections
@@ -162,7 +245,7 @@ fddml_nuisance <- function(Y, D, G, Ti, X,
           L_ind[folds != k], X[folds != k, , drop = FALSE],
           X[pred_k, , drop = FALSE], method, family = "binomial")
       }
-      result[[pi_key]] <- pmax(result[[pi_key]], 0.001)
+      result[[pi_key]] <- pmax(result[[pi_key]], .MIN_PROPENSITY)
     }
   }
 

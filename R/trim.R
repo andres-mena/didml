@@ -20,7 +20,7 @@
 #'   }
 #'
 #' @export
-fddml_trim <- function(pG_raw,
+didml_trim <- function(pG_raw,
                         DID_D = NULL,
                         method = "auto",
                         alpha_fixed = 0.10,

@@ -3,7 +3,10 @@
 # Minimum training observations for ML fit; below this, return NA
 .MIN_CELL_SIZE <- 10L
 
-#' Validate inputs for fddml estimation
+# Minimum propensity floor — prevents division by zero in IPW weights
+.MIN_PROPENSITY <- 0.001
+
+#' Validate inputs for didml estimation
 #' @noRd
 .validate_inputs <- function(Y, D, G, Ti, X) {
   N <- length(Y)

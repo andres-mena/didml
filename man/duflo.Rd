@@ -43,8 +43,9 @@ change are G=0.
 \examples{
 \donttest{
 data(duflo)
-fit <- fddml(duflo$Y, duflo$D, duflo$G, duflo$Ti, duflo$X,
-             estimand = "wald", method = "lasso", K = 5,
+# Fuzzy DID with DML
+fit <- didml(duflo$Y, duflo$D, duflo$G, duflo$Ti, duflo$X,
+             iv = TRUE, estimator = "wald", method = "lasso", K = 5,
              cluster = duflo$cluster)
 print(fit)
 }

@@ -1,55 +1,91 @@
-# fddml
+# didml
 
-**Fuzzy Difference-in-Differences with Machine Learning**
+**Difference-in-Differences with Machine Learning**
 
-R package implementing the DML-Wald and DML-TC estimators from Mena (2026), "Double Debiased Machine Learning for Difference-in-Differences under Imperfect Compliance."
+Unified R package for DID estimation with machine learning nuisance estimation. Supports sharp DID, fuzzy DID, and extensible multi-period designs.
+
+## Available Estimators
+
+| Design | IV (Fuzzy) | DML | Estimator | Reference |
+|--------|-----------|-----|-----------|-----------|
+| 2x2 | No | No | DR-DID | Sant'Anna & Zhao (2020) |
+| 2x2 | No | Yes | DML-DID | Chang (2020) |
+| 2x2 | Yes | Yes | DML-Wald, DML-TC | Mena (2026) |
+| Multi-period | * | * | *Coming soon* | |
 
 ## Installation
 
 ```r
 # install.packages("remotes")
-remotes::install_github("andres-mena/fddml")
+remotes::install_github("andres-mena/didml")
+
+# For sharp DID without DML (optional):
+install.packages("DRDID")
 ```
 
 ## Quick Start
 
 ```r
-library(fddml)
+library(didml)
 
-# Bundled INPRES application (Duflo 2001, CD'H 2018)
+# Sharp DID with ML (Chang 2020)
+fit_sharp <- didml(Y, D, G, Ti, X, iv = FALSE, dml = TRUE)
+
+# Sharp DID without ML (Sant'Anna & Zhao 2020)
+fit_drdid <- didml(Y, D, G, Ti, X, iv = FALSE, dml = FALSE)
+
+# Fuzzy DID with ML (Mena 2026)
+fit_fuzzy <- didml(Y, D, G, Ti, X, iv = TRUE, dml = TRUE)
+
+# Print, summarize, plot
+print(fit_fuzzy)
+summary(fit_fuzzy)
+plot(fit_fuzzy)
+```
+
+## Bundled Application
+
+```r
+# INPRES school construction (Duflo 2001, CD'H 2018)
 data(duflo)
-fit <- fddml(duflo$Y, duflo$D, duflo$G, duflo$Ti, duflo$X,
-             estimand = "both", method = "lasso", K = 5,
+fit <- didml(duflo$Y, duflo$D, duflo$G, duflo$Ti, duflo$X,
+             iv = TRUE, dml = TRUE, method = "lasso", K = 5,
              cluster = duflo$cluster)
 print(fit)
-summary(fit)
-plot(fit)
 ```
 
 ## Features
 
-- **Two estimands**: DML-Wald (Assumptions 1-6) and DML-TC (Assumptions 1-3, 4')
+- **Three estimation paths**: Sharp (DRDID), Sharp DML (Chang), Fuzzy DML (Wald/TC)
+- **Single entry point**: `didml()` routes to the right estimator via `iv` and `dml` flags
 - **Flexible ML**: Lasso, Random Forest, neural networks, OLS, or custom functions
 - **Cross-fitting**: K-fold sample splitting for valid post-selection inference
-- **Optimal trimming**: Data-driven propensity score trimming (Theorem 2)
+- **Optimal trimming**: Data-driven one-sided propensity score trimming
 - **Inference**: Analytical, cluster-robust, or multiplier bootstrap SEs
 - **Bundled data**: INPRES school construction application
 
 ## Modular API
 
 ```r
-# Step-by-step for advanced users
-nuis <- fddml_nuisance(Y, D, G, Ti, X, method = "rf", K = 5)
-trim <- fddml_trim(nuis$pG_raw, method = "auto")
-wald <- fddml_wald(W, nuis)
-inf  <- fddml_inference(wald, cluster = district_id, se_type = "cluster")
+# Step-by-step for advanced users (fuzzy DID)
+nuis <- didml_nuisance(Y, D, G, Ti, X, method = "rf", K = 5, iv = TRUE)
+trim <- didml_trim(nuis$pG_raw, method = "auto")
+wald <- didml_wald(W, nuis)
+inf  <- didml_inference(wald, cluster = district_id, se_type = "cluster")
+
+# Step-by-step (sharp DID with DML)
+nuis <- didml_nuisance(Y, D, G, Ti, X, method = "lasso", K = 5, iv = FALSE)
+chang <- didml_chang(W, nuis)
+inf   <- didml_inference(chang)
 ```
 
 ## References
 
+- Chang, N.-C. (2020). Double/debiased machine learning for difference-in-differences models. *The Econometrics Journal*, 23(2), 177-191.
 - Mena, A. (2026). Double Debiased Machine Learning for DID under Imperfect Compliance. Brown University.
-- De Chaisemartin, C. and D'Haultfoeuille, X. (2018). Fuzzy Differences-in-Differences. *Review of Economic Studies*, 85(2).
+- Sant'Anna, P.H.C. and Zhao, J. (2020). Doubly robust difference-in-differences estimators. *Journal of Econometrics*, 219(1), 101-122.
 - Chernozhukov, V. et al. (2018). Double/Debiased Machine Learning. *Econometrics Journal*, 21(1).
+- De Chaisemartin, C. and D'Haultfoeuille, X. (2018). Fuzzy Differences-in-Differences. *Review of Economic Studies*, 85(2).
 
 ## License
 

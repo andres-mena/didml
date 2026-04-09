@@ -10,7 +10,7 @@ test_that("fddml_wald returns correct structure with OLS", {
   fit <- fddml(Y, D, G, Ti, X, estimand = "wald", method = "ols",
                K = 2, trim = "none", seed = 42)
 
-  expect_s3_class(fit, "fddml")
+  expect_s3_class(fit, "didml")
   expect_equal(nrow(fit$estimates), 1)
   expect_equal(fit$estimates$estimand, "DML-Wald")
   expect_true(is.finite(fit$estimates$estimate))
@@ -99,7 +99,7 @@ test_that("tidy returns correct columns", {
 
   fit <- fddml(Y, D, G, Ti, X, estimand = "wald", method = "ols",
                K = 2, trim = "none", seed = 1)
-  td <- tidy.fddml(fit)
+  td <- tidy.didml(fit)
 
   expect_true("term" %in% names(td))
   expect_true("estimate" %in% names(td))

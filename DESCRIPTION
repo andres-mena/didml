@@ -1,17 +1,20 @@
-Package: fddml
-Title: Fuzzy Difference-in-Differences with Machine Learning
-Version: 0.1.0
+Package: didml
+Title: Difference-in-Differences with Machine Learning
+Version: 0.2.0
 Authors@R: c(
     person("Andres", "Mena", email = "andres_mena@brown.edu",
            role = c("aut", "cre"),
            comment = c(ORCID = ""))
   )
-Description: Doubly robust GMM estimators for fuzzy difference-in-differences
-    designs with high-dimensional covariates. Implements the DML-Wald and
-    DML-TC estimators of Mena (2026) with cross-fitted nuisance estimation
-    via Lasso, Random Forest, neural networks, or OLS. Includes optimal
-    propensity score trimming, clustered standard errors, and a bundled
-    empirical application to the INPRES school construction program.
+Description: Unified estimation for difference-in-differences designs
+    with machine learning nuisance estimation. Supports sharp DID
+    (Sant'Anna & Zhao 2020 via DRDID, and DML-DID of Chang 2020),
+    fuzzy DID (DML-Wald and DML-TC of Mena 2026), and extensible
+    multi-period designs. Cross-fitted nuisance estimation via Lasso,
+    Random Forest, neural networks, OLS, or user-supplied learners.
+    Includes optimal propensity score trimming, clustered standard
+    errors, and a bundled empirical application to the INPRES school
+    construction program.
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
@@ -23,9 +26,10 @@ Imports:
     stats,
     ggplot2 (>= 3.4.0)
 Suggests:
+    DRDID (>= 1.0.0),
     randomForest,
     nnet,
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
-URL: https://github.com/andres-mena/fddml
-BugReports: https://github.com/andres-mena/fddml/issues
+URL: https://github.com/andres-mena/didml
+BugReports: https://github.com/andres-mena/didml/issues
