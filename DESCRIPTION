@@ -23,6 +23,7 @@ RoxygenNote: 7.3.3
 Depends: R (>= 4.0.0)
 Imports:
     glmnet (>= 4.0),
+    MASS,
     stats,
     ggplot2 (>= 3.4.0)
 Suggests:
