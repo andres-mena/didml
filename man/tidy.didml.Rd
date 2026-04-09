@@ -4,7 +4,7 @@
 \alias{tidy.didml}
 \title{Tidy a didml object (broom-style)}
 \usage{
-\method{tidy}{didml}(x, ...)
+tidy.didml(x, ...)
 }
 \arguments{
 \item{x}{A \code{didml} object.}

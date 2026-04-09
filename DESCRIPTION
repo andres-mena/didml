@@ -1,6 +1,6 @@
 Package: didml
 Title: Difference-in-Differences with Machine Learning
-Version: 0.2.0
+Version: 0.3.0
 Authors@R: c(
     person("Andres", "Mena", email = "andres_mena@brown.edu",
            role = c("aut", "cre"),

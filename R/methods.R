@@ -21,10 +21,27 @@ print.didml <- function(x, digits = 4, ...) {
   cat("  N =", x$N, " p =", x$p)
   if (x$dml) {
     cat("  K =", x$settings$K, " method =", x$settings$method)
+    if (!is.null(x$settings$ensemble_type))
+      cat("  ensemble =", x$settings$ensemble_type)
+    if (!is.null(x$settings$method_outcome))
+      cat("\n  method_outcome =", paste(x$settings$method_outcome, collapse = "+"))
+    if (!is.null(x$settings$method_propensity))
+      cat("\n  method_propensity =", paste(x$settings$method_propensity, collapse = "+"))
+    if (!is.null(x$settings$reps) && x$settings$reps > 1L)
+      cat("  reps =", x$settings$reps)
   }
   cat("\n")
   if (!is.null(x$trim_info) && x$trim_info$alpha_hat > 0)
     cat("  Trimming: alpha =", round(x$trim_info$alpha_hat, 3), "\n")
+  if (!is.null(x$ensemble_weights)) {
+    cat("  Ensemble weights:")
+    for (nm in names(x$ensemble_weights)) {
+      w <- x$ensemble_weights[[nm]]
+      if (length(w) > 1)
+        cat("\n    ", nm, ":", paste(round(w, 3), collapse = ", "))
+    }
+    cat("\n")
+  }
   cat("\n")
   est <- x$estimates
   for (i in seq_len(nrow(est))) {
@@ -62,7 +79,9 @@ summary.didml <- function(object, ...) {
     iv = object$iv,
     dml = object$dml,
     wald_naive = if (!is.null(object$wald) && !is.null(object$wald$wald_naive))
-      object$wald$wald_naive else NULL
+      object$wald$wald_naive else NULL,
+    ensemble_weights = object$ensemble_weights,
+    reps_detail = object$reps_detail
   )
   class(out) <- "summary.didml"
   out
@@ -90,7 +109,16 @@ print.summary.didml <- function(x, ...) {
   cat("  Call:", deparse(x$call, width.cutoff = 60), "\n")
   cat("\n  Sample: N =", x$N, ", p =", x$p, "\n")
   if (x$dml) {
-    cat("  Method:", x$settings$method, "| Folds:", x$settings$K, "\n")
+    cat("  Method:", x$settings$method, "| Folds:", x$settings$K)
+    if (!is.null(x$settings$reps) && x$settings$reps > 1L)
+      cat(" | Reps:", x$settings$reps)
+    cat("\n")
+    if (!is.null(x$settings$ensemble_type))
+      cat("  Ensemble:", x$settings$ensemble_type, "\n")
+    if (!is.null(x$settings$method_outcome))
+      cat("  Method (outcome):", paste(x$settings$method_outcome, collapse = "+"), "\n")
+    if (!is.null(x$settings$method_propensity))
+      cat("  Method (propensity):", paste(x$settings$method_propensity, collapse = "+"), "\n")
   }
   cat("  SE type:", x$settings$se_type, "\n")
   if (!is.null(x$trim_info)) {
@@ -138,7 +166,6 @@ confint.didml <- function(object, parm = NULL, level = 0.95, ...) {
 #' @param ... Additional arguments (ignored).
 #' @return A data frame with columns: term, estimate, std.error, statistic,
 #'   p.value, conf.low, conf.high.
-#' @method tidy didml
 #' @export
 tidy.didml <- function(x, ...) {
   est <- x$estimates

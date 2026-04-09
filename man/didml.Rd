@@ -15,7 +15,11 @@ didml(
   dml = TRUE,
   estimator = "auto",
   method = "lasso",
+  method_outcome = NULL,
+  method_propensity = NULL,
+  ensemble_type = "average",
   K = 5L,
+  reps = 1L,
   trim = "auto",
   trim_alpha = 0.1,
   cluster = NULL,
@@ -55,12 +59,32 @@ learning for nuisance estimation. If \code{FALSE}, use parametric DRDID
 \item \code{iv = FALSE, dml = FALSE}: resolves to \code{"drdid"}.
 }}
 
-\item{method}{Character (\code{"lasso"}, \code{"rf"}, \code{"nn"}, \code{"ols"}) or a custom
-function \code{f(Y_train, X_train, X_predict)}. Only used when
-\code{dml = TRUE}.}
+\item{method}{Character string, character vector, or custom function.
+A single string (\code{"lasso"}, \code{"rf"}, \code{"nn"}, \code{"ols"}) or a function
+\code{f(Y_train, X_train, X_predict)} uses one learner. A character vector
+(e.g. \code{c("ols", "lasso", "rf")}) activates stacking, combining
+predictions via \code{ensemble_type}. Only used when \code{dml = TRUE}.}
+
+\item{method_outcome}{Character string or vector overriding \code{method}
+for outcome/treatment regressions (m_Y, m_D, ell_20). Default
+\code{NULL} uses \code{method}.}
+
+\item{method_propensity}{Character string or vector overriding \code{method}
+for propensity score estimation. Default \code{NULL} uses \code{method}.}
+
+\item{ensemble_type}{Character: \code{"average"} (default when multiple methods),
+\code{"nnls1"} (non-negative least squares, weights sum to 1), or
+\code{"singlebest"} (pick learner with lowest CV MSE). Ignored for single
+learner.}
 
 \item{K}{Integer, number of cross-fitting folds (default 5). Only used
 when \code{dml = TRUE}.}
+
+\item{reps}{Integer, number of cross-fitting repetitions (default 1).
+When \code{reps > 1}, the full pipeline (nuisance, trim, score,
+inference) is run \code{reps} times with independent fold assignments.
+Estimates are aggregated using the median; SEs incorporate both
+within-rep variance and across-rep variability (DoubleML convention).}
 
 \item{trim}{Character: \code{"auto"} (data-driven, default), \code{"fixed"},
 or \code{"none"}. Only used when \code{dml = TRUE}.}
@@ -99,6 +123,8 @@ ci_lower, ci_upper, p_value.}
 \item{iv}{Whether fuzzy DID was used.}
 \item{dml}{Whether DML was used.}
 \item{settings}{List of estimation settings.}
+\item{ensemble_weights}{Ensemble weights when stacking (NULL otherwise).}
+\item{reps_detail}{Per-rep results when \code{reps > 1} (NULL otherwise).}
 }
 }
 \description{
@@ -126,6 +152,18 @@ print(fit_fuzzy)
 fit_sharp <- didml(Y, D, G, Ti, X, iv = FALSE, dml = TRUE,
                    method = "ols", K = 2)
 print(fit_sharp)
+
+# Stacking with multiple learners
+fit_stack <- didml(Y, D, G, Ti, X, iv = FALSE, dml = TRUE,
+                   method = c("ols", "lasso"), K = 2)
+
+# Cross-fitting repetitions
+fit_reps <- didml(Y, D, G, Ti, X, iv = FALSE, dml = TRUE,
+                  method = "ols", K = 2, reps = 3)
+
+# Separate learners for outcome and propensity
+fit_sep <- didml(Y, D, G, Ti, X, iv = FALSE, dml = TRUE,
+                 method = "ols", method_propensity = "lasso", K = 2)
 }
 
 }
@@ -145,4 +183,8 @@ Journal}, 23(2), 177-191.
 Sant'Anna, P. H. C. and Zhao, J. (2020). Doubly robust
 difference-in-differences estimators. \emph{Journal of Econometrics},
 219(1), 101-122.
+
+Ahrens, A., Hansen, C. B., Schaffer, M. E. and Wiemann, T. (2024).
+ddml: Double/debiased machine learning in Stata. \emph{The Stata
+Journal}, 24(1), 3-45.
 }

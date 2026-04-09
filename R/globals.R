@@ -5,5 +5,7 @@ utils::globalVariables(c(
   "pG_raw", "estimand", "estimate", "se",
   "component", "value", "n_label", "alpha",
   "pG", "score",
-  "ell_20", "pT", "wald_naive"
+  "ell_20", "pT", "wald_naive",
+  "ensemble_weights", "reps_detail",
+  "method_outcome", "method_propensity", "ensemble_type"
 ))

@@ -5,3 +5,5 @@
 .DS_Store
 *.Rproj
 inst/doc
+*.tar.gz
+*.Rcheck/

@@ -79,13 +79,24 @@ chang <- didml_chang(W, nuis)
 inf   <- didml_inference(chang)
 ```
 
+## Related Software
+
+| Package | Language | Scope |
+|---------|----------|-------|
+| **didml** (this) | R | DID-specific: sharp, fuzzy, DML, trimming |
+| [DRDID](https://github.com/pedrohcgs/DRDID) | R | Sharp DR-DID (Sant'Anna & Zhao 2020) |
+| [ddml](https://github.com/thomaswiemann/ddml) | R | General DDML (partial linear, interactive, IV) |
+| [ddml](https://github.com/aahrens1/ddml) | Stata | General DDML + stacking (Ahrens et al. 2024) |
+| [csdid](https://github.com/d2cml-ai/csdid) | R/Stata | Multi-period DID (Callaway & Sant'Anna 2021) |
+
 ## References
 
+- Ahrens, A., Hansen, C.B., Schaffer, M.E. and Wiemann, T. (2024). ddml: Double/debiased machine learning in Stata. *The Stata Journal*, 24(1), 3-45.
 - Chang, N.-C. (2020). Double/debiased machine learning for difference-in-differences models. *The Econometrics Journal*, 23(2), 177-191.
-- Mena, A. (2026). Double Debiased Machine Learning for DID under Imperfect Compliance. Brown University.
-- Sant'Anna, P.H.C. and Zhao, J. (2020). Doubly robust difference-in-differences estimators. *Journal of Econometrics*, 219(1), 101-122.
 - Chernozhukov, V. et al. (2018). Double/Debiased Machine Learning. *Econometrics Journal*, 21(1).
 - De Chaisemartin, C. and D'Haultfoeuille, X. (2018). Fuzzy Differences-in-Differences. *Review of Economic Studies*, 85(2).
+- Mena, A. (2026). Double Debiased Machine Learning for DID under Imperfect Compliance. Brown University.
+- Sant'Anna, P.H.C. and Zhao, J. (2020). Doubly robust difference-in-differences estimators. *Journal of Econometrics*, 219(1), 101-122.
 
 ## License
 

@@ -124,3 +124,95 @@
     na_out
   })
 }
+
+#' Compute ensemble weights for stacking
+#'
+#' Given a matrix of cross-validated predictions (one column per learner)
+#' and the true outcome, compute combination weights under the specified
+#' ensemble strategy.
+#'
+#' @param Y_cv Numeric vector of true outcomes (length N).
+#' @param pred_matrix Numeric matrix of CV predictions (N x J).
+#' @param type Character: `"average"`, `"singlebest"`, or `"nnls1"`.
+#' @return Numeric vector of weights (length J), summing to 1.
+#' @noRd
+.compute_ensemble_weights <- function(Y_cv, pred_matrix, type = "average") {
+  J <- ncol(pred_matrix)
+  if (J == 1L) return(1)
+
+  if (type == "average") return(rep(1 / J, J))
+
+  if (type == "singlebest") {
+    mse <- colMeans((Y_cv - pred_matrix)^2, na.rm = TRUE)
+    w <- rep(0, J)
+    w[which.min(mse)] <- 1
+    return(w)
+  }
+
+  if (type == "nnls1") {
+    # Constrained LS: min ||Y - Xw||^2 s.t. w >= 0, sum(w) = 1
+    # Use glmnet ridge with lower.limits = 0, then normalize
+    fit <- glmnet::glmnet(pred_matrix, Y_cv, alpha = 0, lambda = 1e-6,
+                          lower.limits = 0, intercept = FALSE)
+    w <- as.vector(stats::coef(fit))[-1]
+    w <- pmax(w, 0)
+    if (sum(w) > 0) w <- w / sum(w) else w <- rep(1 / J, J)
+    return(w)
+  }
+
+  # Fallback
+  rep(1 / J, J)
+}
+
+
+#' Fit a stacked (ensemble) nuisance model
+#'
+#' Calls `.fit_nuisance_cell()` for each method in `methods`, combines
+#' predictions using the selected ensemble strategy.
+#'
+#' @param Y_train Numeric vector of training outcomes.
+#' @param X_train Numeric matrix of training covariates.
+#' @param X_predict Numeric matrix of prediction covariates.
+#' @param methods Character vector of method names (e.g. `c("ols", "lasso")`).
+#' @param ensemble_type Character: `"average"`, `"singlebest"`, or `"nnls1"`.
+#' @param family Character: `"gaussian"` or `"binomial"`.
+#' @param Y_cv Numeric vector of CV outcomes for weight estimation (same as
+#'   Y_train for within-fold stacking). Used by `"singlebest"` and `"nnls1"`.
+#' @param X_cv Numeric matrix of CV covariates matching Y_cv.
+#' @return A list with `predictions` (numeric vector) and `weights` (numeric vector).
+#' @noRd
+.fit_nuisance_stacked <- function(Y_train, X_train, X_predict, methods,
+                                   ensemble_type = "average",
+                                   family = "gaussian",
+                                   Y_cv = NULL, X_cv = NULL) {
+  J <- length(methods)
+  N_pred <- nrow(X_predict)
+
+  # Get predictions from each learner
+  pred_matrix <- matrix(NA_real_, nrow = N_pred, ncol = J)
+  for (j in seq_len(J)) {
+    pred_matrix[, j] <- .fit_nuisance_cell(Y_train, X_train, X_predict,
+                                            methods[j], family = family)
+  }
+
+  # For weight computation: get in-sample (training) predictions per learner
+  if (ensemble_type != "average" && !is.null(Y_cv) && !is.null(X_cv)) {
+    cv_pred_matrix <- matrix(NA_real_, nrow = length(Y_cv), ncol = J)
+    for (j in seq_len(J)) {
+      cv_pred_matrix[, j] <- .fit_nuisance_cell(Y_train, X_train, X_cv,
+                                                  methods[j], family = family)
+    }
+    weights <- .compute_ensemble_weights(Y_cv, cv_pred_matrix, type = ensemble_type)
+  } else if (ensemble_type != "average") {
+    # Fallback: use training predictions on prediction set for weight computation
+    weights <- .compute_ensemble_weights(
+      rep(NA_real_, N_pred), pred_matrix, type = "average")
+  } else {
+    weights <- rep(1 / J, J)
+  }
+
+  # Combine predictions
+  predictions <- as.vector(pred_matrix %*% weights)
+
+  list(predictions = predictions, weights = weights)
+}

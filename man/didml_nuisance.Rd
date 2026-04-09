@@ -11,6 +11,9 @@ didml_nuisance(
   Ti,
   X,
   method = "lasso",
+  method_outcome = NULL,
+  method_propensity = NULL,
+  ensemble_type = "average",
   K = 5L,
   iv = TRUE,
   estimand = "both",
@@ -28,8 +31,22 @@ didml_nuisance(
 
 \item{X}{Numeric matrix of covariates.}
 
-\item{method}{Character string (\code{"lasso"}, \code{"rf"}, \code{"nn"}, \code{"ols"}) or a
-function \code{f(Y_train, X_train, X_predict)} returning predicted values.}
+\item{method}{Character string or character vector of methods. A single
+string (\code{"lasso"}, \code{"rf"}, \code{"nn"}, \code{"ols"}) or a function
+\code{f(Y_train, X_train, X_predict)} uses one learner. A character vector
+(e.g. \code{c("ols", "lasso")}) activates stacking.}
+
+\item{method_outcome}{Character string or vector overriding \code{method}
+for outcome/treatment regressions (m_Y, m_D, ell_20). Default \code{NULL}
+uses \code{method}.}
+
+\item{method_propensity}{Character string or vector overriding \code{method}
+for propensity score estimation. Default \code{NULL} uses \code{method}.}
+
+\item{ensemble_type}{Character: \code{"average"} (default), \code{"singlebest"}, or
+\code{"nnls1"}. Controls how predictions from multiple learners are combined
+when \code{method} (or \code{method_outcome}/\code{method_propensity})
+is a vector. Ignored for single-learner methods.}
 
 \item{K}{Integer >= 2, number of cross-fitting folds (default 5).}
 
@@ -49,11 +66,14 @@ Entries may contain NA where estimation failed (small cells, collinearity).
 When \code{iv = FALSE}, the list contains: \code{pG_raw}, \code{pi_11},
 \code{pi_10}, \code{pi_01}, \code{pi_00}, \code{ell_20}, \code{pT},
 \code{folds}, and \code{estimand = "chang"}.
+When stacking is used, \code{ensemble_weights} is also returned.
 }
 \description{
 Estimates all nuisance functions required for DML estimation using
 K-fold cross-fitting. Supports Lasso, Random Forest, neural networks,
-OLS, or a user-supplied function.
+OLS, or a user-supplied function. When \code{method} is a character
+vector of length > 1, predictions are combined via stacking
+(see \code{ensemble_type}).
 }
 \details{
 When \code{iv = TRUE} (fuzzy DID), estimates conditional expectations
@@ -89,6 +109,9 @@ Y <- 1 + X[,1] + D + rnorm(N)
 nuis_fuzzy <- didml_nuisance(Y, D, G, Ti, X, method = "ols", K = 2, iv = TRUE)
 # Sharp DID nuisance (Chang 2020)
 nuis_sharp <- didml_nuisance(Y, D, G, Ti, X, method = "ols", K = 2, iv = FALSE)
+# Stacking with multiple learners
+nuis_stack <- didml_nuisance(Y, D, G, Ti, X, method = c("ols", "lasso"),
+                              K = 2, iv = FALSE, ensemble_type = "average")
 }
 
 }

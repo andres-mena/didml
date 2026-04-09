@@ -146,3 +146,102 @@ test_that("didml cluster SEs work for Chang estimator", {
 
   expect_true(is.finite(fit$estimates$se))
 })
+
+# ---- Feature 1: Stacking / Multiple Learners ----
+
+test_that("stacking with method = c('ols', 'lasso') works", {
+  set.seed(42)
+  N <- 200
+  X <- matrix(rnorm(N * 3), ncol = 3)
+  G <- rbinom(N, 1, plogis(0.3 * X[, 1]))
+  Ti <- rbinom(N, 1, 0.5)
+  D <- as.integer(G * Ti)
+  Y <- 1 + X[, 1] + 0.5 * G * Ti + rnorm(N)
+
+  fit <- didml(Y, D, G, Ti, X, iv = FALSE, dml = TRUE,
+               method = c("ols", "lasso"), K = 2,
+               ensemble_type = "average",
+               trim = "none", seed = 42)
+
+  expect_s3_class(fit, "didml")
+  expect_true(is.finite(fit$estimates$estimate))
+  expect_true(is.finite(fit$estimates$se))
+  # Ensemble weights should be stored
+  expect_true(!is.null(fit$ensemble_weights))
+  # Method in settings should show stacked methods
+  expect_true(grepl("\\+", fit$settings$method))
+})
+
+# ---- Feature 2: Cross-Fitting Repetitions ----
+
+test_that("reps = 2 produces aggregated estimate", {
+  set.seed(42)
+  N <- 200
+  X <- matrix(rnorm(N * 3), ncol = 3)
+  G <- rbinom(N, 1, plogis(0.3 * X[, 1]))
+  Ti <- rbinom(N, 1, 0.5)
+  D <- as.integer(G * Ti)
+  Y <- 1 + X[, 1] + 0.5 * G * Ti + rnorm(N)
+
+  fit <- didml(Y, D, G, Ti, X, iv = FALSE, dml = TRUE,
+               method = "ols", K = 2, reps = 2L,
+               trim = "none", seed = 42)
+
+  expect_s3_class(fit, "didml")
+  expect_true(is.finite(fit$estimates$estimate))
+  expect_true(is.finite(fit$estimates$se))
+  # reps_detail should contain per-rep results
+  expect_true(!is.null(fit$reps_detail))
+  expect_equal(length(fit$reps_detail), 2)
+  expect_equal(fit$settings$reps, 2L)
+})
+
+# ---- Feature 3: Separate Learners per Nuisance Component ----
+
+test_that("method_propensity overrides method for propensity", {
+  set.seed(42)
+  N <- 200
+  X <- matrix(rnorm(N * 3), ncol = 3)
+  G <- rbinom(N, 1, plogis(0.3 * X[, 1]))
+  Ti <- rbinom(N, 1, 0.5)
+  D <- as.integer(G * Ti)
+  Y <- 1 + X[, 1] + 0.5 * G * Ti + rnorm(N)
+
+  fit <- didml(Y, D, G, Ti, X, iv = FALSE, dml = TRUE,
+               method = "ols", method_propensity = "lasso",
+               K = 2, trim = "none", seed = 42)
+
+  expect_s3_class(fit, "didml")
+  expect_true(is.finite(fit$estimates$estimate))
+  expect_true(is.finite(fit$estimates$se))
+  # Settings should record the override
+  expect_equal(fit$settings$method_propensity, "lasso")
+})
+
+# ---- Feature 1 (continued): singlebest ensemble ----
+
+test_that("ensemble_type = 'singlebest' selects one learner", {
+  set.seed(42)
+  N <- 200
+  X <- matrix(rnorm(N * 3), ncol = 3)
+  G <- rbinom(N, 1, plogis(0.3 * X[, 1]))
+  Ti <- rbinom(N, 1, 0.5)
+  D <- as.integer(G * Ti)
+  Y <- 1 + X[, 1] + 0.5 * G * Ti + rnorm(N)
+
+  fit <- didml(Y, D, G, Ti, X, iv = FALSE, dml = TRUE,
+               method = c("ols", "lasso"), K = 2,
+               ensemble_type = "singlebest",
+               trim = "none", seed = 42)
+
+  expect_s3_class(fit, "didml")
+  expect_true(is.finite(fit$estimates$estimate))
+  # Ensemble weights should have exactly one non-zero entry
+  ew <- fit$ensemble_weights
+  expect_true(!is.null(ew))
+  # At least one component should have a weight vector with a single 1
+  has_singlebest <- any(vapply(ew, function(w) {
+    length(w) > 1 && sum(w == 1) == 1 && sum(w == 0) == (length(w) - 1)
+  }, logical(1)))
+  expect_true(has_singlebest)
+})

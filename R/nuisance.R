@@ -2,7 +2,9 @@
 #'
 #' Estimates all nuisance functions required for DML estimation using
 #' K-fold cross-fitting. Supports Lasso, Random Forest, neural networks,
-#' OLS, or a user-supplied function.
+#' OLS, or a user-supplied function. When \code{method} is a character
+#' vector of length > 1, predictions are combined via stacking
+#' (see \code{ensemble_type}).
 #'
 #' @details
 #' When \code{iv = TRUE} (fuzzy DID), estimates conditional expectations
@@ -30,8 +32,19 @@
 #' @param G Binary vector of group assignment (0/1).
 #' @param Ti Binary vector of time period (0/1).
 #' @param X Numeric matrix of covariates.
-#' @param method Character string (`"lasso"`, `"rf"`, `"nn"`, `"ols"`) or a
-#'   function `f(Y_train, X_train, X_predict)` returning predicted values.
+#' @param method Character string or character vector of methods. A single
+#'   string (`"lasso"`, `"rf"`, `"nn"`, `"ols"`) or a function
+#'   `f(Y_train, X_train, X_predict)` uses one learner. A character vector
+#'   (e.g. `c("ols", "lasso")`) activates stacking.
+#' @param method_outcome Character string or vector overriding \code{method}
+#'   for outcome/treatment regressions (m_Y, m_D, ell_20). Default \code{NULL}
+#'   uses \code{method}.
+#' @param method_propensity Character string or vector overriding \code{method}
+#'   for propensity score estimation. Default \code{NULL} uses \code{method}.
+#' @param ensemble_type Character: `"average"` (default), `"singlebest"`, or
+#'   `"nnls1"`. Controls how predictions from multiple learners are combined
+#'   when \code{method} (or \code{method_outcome}/\code{method_propensity})
+#'   is a vector. Ignored for single-learner methods.
 #' @param K Integer >= 2, number of cross-fitting folds (default 5).
 #' @param iv Logical. If \code{TRUE} (default), estimate nuisance for fuzzy
 #'   DID (Wald/TC). If \code{FALSE}, estimate nuisance for sharp DID
@@ -46,6 +59,7 @@
 #'   When \code{iv = FALSE}, the list contains: \code{pG_raw}, \code{pi_11},
 #'   \code{pi_10}, \code{pi_01}, \code{pi_00}, \code{ell_20}, \code{pT},
 #'   \code{folds}, and \code{estimand = "chang"}.
+#'   When stacking is used, \code{ensemble_weights} is also returned.
 #'
 #' @examples
 #' \donttest{
@@ -60,21 +74,50 @@
 #' nuis_fuzzy <- didml_nuisance(Y, D, G, Ti, X, method = "ols", K = 2, iv = TRUE)
 #' # Sharp DID nuisance (Chang 2020)
 #' nuis_sharp <- didml_nuisance(Y, D, G, Ti, X, method = "ols", K = 2, iv = FALSE)
+#' # Stacking with multiple learners
+#' nuis_stack <- didml_nuisance(Y, D, G, Ti, X, method = c("ols", "lasso"),
+#'                               K = 2, iv = FALSE, ensemble_type = "average")
 #' }
 #'
 #' @export
 didml_nuisance <- function(Y, D, G, Ti, X,
                             method = "lasso",
+                            method_outcome = NULL,
+                            method_propensity = NULL,
+                            ensemble_type = "average",
                             K = 5L,
                             iv = TRUE,
                             estimand = "both",
                             seed = NULL) {
-  # Validate method
-  if (is.character(method)) {
-    method <- match.arg(method, c("lasso", "rf", "nn", "ols"))
-  } else if (!is.function(method)) {
-    stop("`method` must be a character string or a function.", call. = FALSE)
+  # Resolve component-specific methods
+  meth_out <- if (!is.null(method_outcome)) method_outcome else method
+  meth_ps  <- if (!is.null(method_propensity)) method_propensity else method
+
+  # Validate methods — accept single string, character vector, or function
+  .validate_method <- function(m, label) {
+    if (is.character(m)) {
+      valid <- c("lasso", "rf", "nn", "ols")
+      bad <- setdiff(m, valid)
+      if (length(bad) > 0)
+        stop("Unknown ", label, " method(s): '",
+             paste(bad, collapse = "', '"), "'. Use ",
+             paste0("'", valid, "'", collapse = ", "),
+             ", or a function.", call. = FALSE)
+    } else if (!is.function(m)) {
+      stop("`", label, "` must be a character string/vector or a function.",
+           call. = FALSE)
+    }
+    m
   }
+  meth_out <- .validate_method(meth_out, "method_outcome")
+  meth_ps  <- .validate_method(meth_ps, "method_propensity")
+
+  ensemble_type <- match.arg(ensemble_type, c("average", "singlebest", "nnls1"))
+
+  # Determine whether stacking is active per component
+  use_stack_out <- is.character(meth_out) && length(meth_out) > 1
+  use_stack_ps  <- is.character(meth_ps)  && length(meth_ps)  > 1
+
   if (!is.numeric(K) || length(K) != 1 || K < 2L)
     stop("`K` must be a single integer >= 2.", call. = FALSE)
   K <- as.integer(K)
@@ -86,6 +129,25 @@ didml_nuisance <- function(Y, D, G, Ti, X,
   folds <- .make_folds(N, K, seed = seed)
   pT <- mean(Ti)
 
+  # Helper: fit a single nuisance component, dispatching to stacked or single
+  .fit_component <- function(Y_tr, X_tr, X_pr, meth, stacked, family = "gaussian",
+                             Y_cv = NULL, X_cv = NULL) {
+    if (stacked) {
+      res <- .fit_nuisance_stacked(Y_tr, X_tr, X_pr, methods = meth,
+                                    ensemble_type = ensemble_type,
+                                    family = family,
+                                    Y_cv = Y_cv, X_cv = X_cv)
+      res
+    } else {
+      m <- if (is.character(meth) && length(meth) == 1) meth else meth
+      list(predictions = .fit_nuisance_cell(Y_tr, X_tr, X_pr, m, family = family),
+           weights = 1)
+    }
+  }
+
+  # Storage for ensemble weights
+  all_weights <- list()
+
   # ---- Sharp DID path (Chang 2020) ----
   if (!iv) {
     estimand <- "chang"
@@ -95,12 +157,13 @@ didml_nuisance <- function(Y, D, G, Ti, X,
     for (k in seq_len(K)) {
       train_k <- which(folds != k)
       pred_k <- which(folds == k)
-      pG_raw[pred_k] <- .fit_nuisance_cell(G[train_k], X[train_k, , drop = FALSE],
-                                             X[pred_k, , drop = FALSE], method,
-                                             family = "binomial")
+      res <- .fit_component(G[train_k], X[train_k, , drop = FALSE],
+                            X[pred_k, , drop = FALSE], meth_ps, use_stack_ps,
+                            family = "binomial",
+                            Y_cv = G[pred_k], X_cv = X[pred_k, , drop = FALSE])
+      pG_raw[pred_k] <- res$predictions
+      all_weights[["propensity"]] <- res$weights
     }
-    # Pre-clip to avoid numerical issues in downstream weight computation.
-    # The trimming step in didml() applies the user's chosen rule on top.
     pG_raw <- pmax(pmin(pG_raw, 1 - .MIN_PROPENSITY), .MIN_PROPENSITY)
 
     # Joint cell probabilities
@@ -117,9 +180,11 @@ didml_nuisance <- function(Y, D, G, Ti, X,
     for (k in seq_len(K)) {
       train_k <- idx_g0[folds[idx_g0] != k]
       pred_k <- which(folds == k)
-      ell_20[pred_k] <- .fit_nuisance_cell(pseudo_Y[train_k],
-                                             X[train_k, , drop = FALSE],
-                                             X[pred_k, , drop = FALSE], method)
+      res <- .fit_component(pseudo_Y[train_k], X[train_k, , drop = FALSE],
+                            X[pred_k, , drop = FALSE], meth_out, use_stack_out,
+                            Y_cv = pseudo_Y[pred_k], X_cv = X[pred_k, , drop = FALSE])
+      ell_20[pred_k] <- res$predictions
+      all_weights[["ell_20"]] <- res$weights
     }
 
     result <- list(
@@ -130,6 +195,9 @@ didml_nuisance <- function(Y, D, G, Ti, X,
       folds = folds,
       estimand = "chang"
     )
+
+    if (use_stack_out || use_stack_ps)
+      result$ensemble_weights <- all_weights
 
     # Warn about NAs
     core_preds <- c("pG_raw", "ell_20")
@@ -168,11 +236,17 @@ didml_nuisance <- function(Y, D, G, Ti, X,
       train_k <- idx[folds[idx] != k]
       pred_k <- which(folds == k)
 
-      # .fit_nuisance_cell returns NA when cell too small or estimation fails
-      m_Y[[key]][pred_k] <- .fit_nuisance_cell(Y[train_k], X[train_k, , drop = FALSE],
-                                                 X[pred_k, , drop = FALSE], method)
-      m_D[[key]][pred_k] <- .fit_nuisance_cell(D[train_k], X[train_k, , drop = FALSE],
-                                                 X[pred_k, , drop = FALSE], method)
+      res_Y <- .fit_component(Y[train_k], X[train_k, , drop = FALSE],
+                              X[pred_k, , drop = FALSE], meth_out, use_stack_out,
+                              Y_cv = Y[pred_k], X_cv = X[pred_k, , drop = FALSE])
+      m_Y[[key]][pred_k] <- res_Y$predictions
+      all_weights[[paste0("m_Y_", key)]] <- res_Y$weights
+
+      res_D <- .fit_component(D[train_k], X[train_k, , drop = FALSE],
+                              X[pred_k, , drop = FALSE], meth_out, use_stack_out,
+                              Y_cv = D[pred_k], X_cv = X[pred_k, , drop = FALSE])
+      m_D[[key]][pred_k] <- res_D$predictions
+      all_weights[[paste0("m_D_", key)]] <- res_D$weights
     }
   }
 
@@ -181,15 +255,16 @@ didml_nuisance <- function(Y, D, G, Ti, X,
   for (k in seq_len(K)) {
     train_k <- which(folds != k)
     pred_k <- which(folds == k)
-    pG_raw[pred_k] <- .fit_nuisance_cell(G[train_k], X[train_k, , drop = FALSE],
-                                           X[pred_k, , drop = FALSE], method,
-                                           family = "binomial")
+    res <- .fit_component(G[train_k], X[train_k, , drop = FALSE],
+                          X[pred_k, , drop = FALSE], meth_ps, use_stack_ps,
+                          family = "binomial",
+                          Y_cv = G[pred_k], X_cv = X[pred_k, , drop = FALSE])
+    pG_raw[pred_k] <- res$predictions
+    all_weights[["propensity"]] <- res$weights
   }
-  # Pre-clip to avoid numerical issues in downstream weight computation
   pG_raw <- pmax(pmin(pG_raw, 1 - .MIN_PROPENSITY), .MIN_PROPENSITY)
 
   # Joint cell probabilities: pi_{gt}(X) = Pr(G=g|X) * Pr(T=t)
-  # Assumes T independent of (G, X) — valid in repeated cross-sections
   pi_11 <- pG_raw * pT
   pi_10 <- pG_raw * (1 - pT)
   pi_01 <- (1 - pG_raw) * pT
@@ -202,6 +277,9 @@ didml_nuisance <- function(Y, D, G, Ti, X,
     pi_11 = pi_11, pi_10 = pi_10, pi_01 = pi_01, pi_00 = pi_00,
     folds = folds
   )
+
+  if (use_stack_out || use_stack_ps)
+    result$ensemble_weights <- all_weights
 
   # Warn about NAs in core predictions
   core_preds <- c("m_Y_10", "m_Y_01", "m_Y_00", "m_D_10", "m_D_01", "m_D_00", "pG_raw")
@@ -233,21 +311,29 @@ didml_nuisance <- function(Y, D, G, Ti, X,
         train_k <- idx[folds[idx] != k]
         pred_k <- which(folds == k)
 
-        # mu_Y_{dgt}(X_i) trained on (d,0,t) cell, predicted for ALL obs.
-        # Cell-membership indicators in the score zero out irrelevant terms.
-        result[[mu_key]][pred_k] <- .fit_nuisance_cell(
-          Y[train_k], X[train_k, , drop = FALSE],
-          X[pred_k, , drop = FALSE], method)
+        # mu_Y_{dgt}(X_i) — outcome regression (uses outcome method)
+        res_mu <- .fit_component(Y[train_k], X[train_k, , drop = FALSE],
+                                 X[pred_k, , drop = FALSE], meth_out, use_stack_out,
+                                 Y_cv = Y[pred_k], X_cv = X[pred_k, , drop = FALSE])
+        result[[mu_key]][pred_k] <- res_mu$predictions
+        all_weights[[mu_key]] <- res_mu$weights
 
-        # Propensity for this (d,g,t) cell
+        # Propensity for this (d,g,t) cell (uses propensity method)
         L_ind <- as.numeric(seq_len(N) %in% idx)
-        result[[pi_key]][pred_k] <- .fit_nuisance_cell(
-          L_ind[folds != k], X[folds != k, , drop = FALSE],
-          X[pred_k, , drop = FALSE], method, family = "binomial")
+        res_pi <- .fit_component(L_ind[folds != k], X[folds != k, , drop = FALSE],
+                                  X[pred_k, , drop = FALSE], meth_ps, use_stack_ps,
+                                  family = "binomial",
+                                  Y_cv = L_ind[pred_k],
+                                  X_cv = X[pred_k, , drop = FALSE])
+        result[[pi_key]][pred_k] <- res_pi$predictions
+        all_weights[[pi_key]] <- res_pi$weights
       }
       result[[pi_key]] <- pmax(result[[pi_key]], .MIN_PROPENSITY)
     }
   }
+
+  if (use_stack_out || use_stack_ps)
+    result$ensemble_weights <- all_weights
 
   result
 }
