@@ -74,6 +74,9 @@
 #' @export
 dgp_didml <- function(n = 1000L, p = 20L, p_aug = 100L, tau = 1,
                        rho = 0.5, seed = NULL) {
+  if (!requireNamespace("MASS", quietly = TRUE))
+    stop("Package 'MASS' required for dgp_didml(). Install with install.packages('MASS').",
+         call. = FALSE)
   if (!is.null(seed)) set.seed(seed)
   n <- as.integer(n)
   p <- as.integer(p)

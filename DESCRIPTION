@@ -23,11 +23,11 @@ RoxygenNote: 7.3.3
 Depends: R (>= 4.0.0)
 Imports:
     glmnet (>= 4.0),
-    MASS,
-    stats,
-    ggplot2 (>= 3.4.0)
+    stats
 Suggests:
     DRDID (>= 1.0.0),
+    ggplot2 (>= 3.4.0),
+    MASS,
     randomForest,
     nnet,
     testthat (>= 3.0.0)

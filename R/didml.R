@@ -166,6 +166,19 @@ didml <- function(Y, D, G, Ti, X,
 
   .validate_inputs(Y, D, G, Ti, X)
 
+  # ---- Cross-fitting validation ----
+  if (dml) {
+    if (K >= N) stop("`K` must be less than `N`. Got K=", K, " with N=", N, ".", call. = FALSE)
+    fold_sizes <- table(rep(seq_len(K), length.out = N))
+    cell_counts <- table(G, Ti)
+    min_cell_per_fold <- min(cell_counts) / K
+    if (min_cell_per_fold < 10) {
+      warning("Some fold x cell combinations may have fewer than 10 observations ",
+              "(smallest cell has ", min(cell_counts), " obs across ", K, " folds). ",
+              "Nuisance estimates may be unreliable. Consider reducing K.", call. = FALSE)
+    }
+  }
+
   # ---- Resolve estimator ----
   if (estimator == "auto") {
     if (iv) {

@@ -45,7 +45,7 @@ didml_trim <- function(pG_raw,
     g_hat <- rep(1, N)
   } else {
     g_fit <- tryCatch(
-      stats::loess(DID_D ~ pG_raw, span = 0.3, degree = 1),
+      suppressWarnings(stats::loess(DID_D ~ pG_raw, span = 0.3, degree = 1)),
       error = function(e) NULL
     )
     if (!is.null(g_fit)) {
@@ -64,7 +64,7 @@ didml_trim <- function(pG_raw,
     if (sum(sel) < 10) { R_vals[i] <- Inf; next }
     num <- sum(pG_raw[sel] / (1 - pG_raw[sel]))
     den <- sum(pG_raw[sel] * g_hat[sel])^2
-    R_vals[i] <- if (den > 1e-10) num / den else Inf
+    R_vals[i] <- if (!is.na(den) && den > 1e-10) num / den else Inf
   }
 
   alpha_hat <- alpha_grid[which.min(R_vals)]

@@ -63,6 +63,10 @@
   }
 
   tryCatch({
+    if (is.function(method)) {
+      return(method(Y_train, X_train, X_predict))
+    }
+
     if (method == "ols") {
       if (family == "binomial") {
         fit <- stats::glm.fit(x = cbind(1, X_train), y = Y_train,
@@ -116,8 +120,6 @@
       preds <- as.vector(stats::predict(mod, newdata = X_pred_scaled))
       if (is_binary) pmax(pmin(preds, 1), 0) else preds
 
-    } else if (is.function(method)) {
-      method(Y_train, X_train, X_predict)
     }
   }, error = function(e) {
     warning("Nuisance estimation failed in cell: ", e$message, ". Returning NA.", call. = FALSE)

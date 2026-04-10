@@ -242,7 +242,7 @@ didml_chang <- function(W, pred) {
   denom_w <- pT * (1 - pT) * pG_bar * (1 - pG_hat)
 
   # Guard against division by near-zero
-  denom_w <- pmax(denom_w, 1e-10)
+  denom_w <- pmax(denom_w, .MIN_PROPENSITY)
 
   w_i <- (G - pG_hat) / denom_w
 

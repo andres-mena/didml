@@ -55,6 +55,10 @@ didml_inference <- function(result, cluster = NULL, se_type = "analytical",
     # Cluster-robust variance with S/(S-1) finite-sample correction
     cluster_sums <- tapply(psi_i, cluster, function(x) sum(x, na.rm = TRUE))
     S <- length(cluster_sums)
+    if (S < 10) {
+      warning("Only ", S, " clusters. Cluster-robust SEs may be unreliable with fewer than 10.",
+              call. = FALSE)
+    }
     V_hat <- (S / (S - 1)) * sum(cluster_sums^2) / (N^2 * G_hat^2)
     se_hat <- sqrt(V_hat)
 
@@ -87,7 +91,8 @@ didml_inference <- function(result, cluster = NULL, se_type = "analytical",
   } else {
     # Analytical (i.i.d.)
     V_hat <- result$variance
-    se_hat <- sqrt(V_hat / N)
+    N_ok <- sum(is.finite(psi_i))
+    se_hat <- sqrt(V_hat / N_ok)
   }
 
   ci_lower <- theta_hat - z_alpha * se_hat
