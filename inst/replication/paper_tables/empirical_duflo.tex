@@ -1,0 +1,27 @@
+\begin{tabular}{lccccccc}
+\toprule
+ & \multicolumn{4}{c}{Wald Estimand} & \multicolumn{3}{c}{TC Estimand} \\
+\cmidrule(lr){2-5} \cmidrule(lr){6-8}
+ & Wald & Wald$_X$ & DML-Wald$^{s}$ & DML-Wald$^{\hat\alpha}$ & TC$_X$ & DML-TC$^{s}$ & DML-TC$^{\hat\alpha}$ \\
+\midrule
+\multicolumn{8}{l}{\textit{Panel A. $D = \mathbf{1}\{\text{yeduc} \geq 6\}$ (primary completion), $\mathrm{DID}_D = 0.088$}} \\
+\midrule
+Point estimate            & $1.623$ & $2.202$ & $2.081$ & $2.072$ & $1.268$ & $1.056$ & $\mathbf{1.057}$ \\
+SE (clustered)            & ---     & $(0.615)$ & $(0.539)$ & $(0.569)$ & $(0.292)$ & $(0.273)$ & $(\mathbf{0.273})$ \\
+95\% CI (per complier)    &         & $[1.00, 3.41]$ & $[1.02, 3.14]$ & $[0.96, 3.19]$ & $[0.70, 1.84]$ & $[0.52, 1.59]$ & $[\mathbf{0.52, 1.59}]$ \\
+Per-year CI ($\div 6$)    &         & $[0.17, 0.57]$ & $[0.17, 0.52]$ & $[0.16, 0.53]$ & $[0.12, 0.31]$ & $[0.09, 0.27]$ & $[\mathbf{0.09, 0.27}]$ \\
+\midrule
+\multicolumn{8}{l}{\textit{Panel B. $D = \mathbf{1}\{\text{yeduc} \geq 12\}$ (high-school completion), $\mathrm{DID}_D = 0.122$}} \\
+\midrule
+Point estimate            & $1.170$ & $1.454$ & $1.376$ & $1.379$ & $1.331$ & $1.189$ & $\mathbf{1.190}$ \\
+SE (clustered)            & ---     & $(0.403)$ & $(0.372)$ & $(0.377)$ & $(0.246)$ & $(0.253)$ & $(\mathbf{0.253})$ \\
+95\% CI (per complier)    &         & $[0.66, 2.24]$ & $[0.65, 2.11]$ & $[0.64, 2.12]$ & $[0.85, 1.81]$ & $[0.69, 1.69]$ & $[\mathbf{0.69, 1.69}]$ \\
+Per-year CI ($\div 12$)   &         & $[0.06, 0.19]$ & $[0.05, 0.18]$ & $[0.05, 0.18]$ & $[0.07, 0.15]$ & $[0.06, 0.14]$ & $[\mathbf{0.06, 0.14}]$ \\
+\midrule
+$\mathrm{DID}_Y$ (reduced form)  & \multicolumn{7}{l}{$0.143$ (log hourly wage, same in both panels)} \\
+Observations                     & \multicolumn{7}{c}{$22{,}414$ (both panels, $G^* \in \{0, 1\}$, $201$ districts)} \\
+Covariates ($p$)                 & ---   & $45$  & $45$  & $45$  & $45$  & $45$  & $45$ \\
+Cross-fitting                    & No    & No    & $L=5$ & $L=5$ & No    & $L=5$ & $L=5$ \\
+FSIF correction                  & No    & No    & Yes   & Yes   & No    & Yes   & Yes \\
+\bottomrule
+\end{tabular}

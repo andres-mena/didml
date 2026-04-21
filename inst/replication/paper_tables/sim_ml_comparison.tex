@@ -1,0 +1,23 @@
+\begin{tabular}{llrrrr}
+\toprule
+ & & \multicolumn{2}{c}{DR-Wald} & \multicolumn{2}{c}{DR-TC} \\
+\cmidrule(lr){3-4} \cmidrule(lr){5-6}
+$N$ & Method & RMSE & Cov. & RMSE & Cov. \\
+\midrule
+100 & Lasso & 12.559 & 0.94 & 4.382 & 0.93 \\
+ & Random Forest & 22.019 & 0.92 & 4.802 & 0.92 \\
+ & Neural Net & 6.289 & 0.94 & 7.202 & 0.95 \\
+\midrule
+500 & Lasso & 1.447 & 0.89 & 1.915 & 0.86 \\
+ & Random Forest & 1.009 & 0.90 & 1.857 & 0.87 \\
+ & Neural Net & 1.492 & 0.92 & 2.870 & 0.94 \\
+\midrule
+1,000 & Lasso & 0.836 & 0.90 & 1.166 & 0.89 \\
+ & Random Forest & 0.725 & 0.90 & 1.141 & 0.89 \\
+ & Neural Net & 1.024 & 0.91 & 1.664 & 0.92 \\
+\midrule
+2,000 & Lasso & 0.561 & 0.89 & 0.737 & 0.92 \\
+ & Random Forest & 0.443 & 0.90 & 0.699 & 0.92 \\
+ & Neural Net & 0.626 & 0.91 & 1.114 & 0.95 \\
+\bottomrule
+\end{tabular}
